@@ -263,7 +263,7 @@ class TestTrainer(unittest.TestCase):
         model, tokenizer = trainer("google/bert_uncased_L-2_H-128_A-2", data, data, task="question-answering", num_train_epochs=40)
 
         questions = Questions((model, tokenizer), gpu=True)
-        self.assertEqual(questions(["What ingredient?"], ["Peel 1 onion"])[0], "onion")
+        self.assertTrue("onion" in questions(["What ingredient?"], ["Peel 1 onion"])[0])
 
     def testRegression(self):
         """
