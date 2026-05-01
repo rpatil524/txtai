@@ -84,13 +84,3 @@ class HFPipeline(Tensors):
 
         # Split into modelargs and kwargs
         return ({arg: value for arg, value in kwargs.items() if arg not in args}, {arg: value for arg, value in kwargs.items() if arg in args})
-
-    def maxlength(self):
-        """
-        Gets the max length to use for generate calls.
-
-        Returns:
-            max length
-        """
-
-        return Models.maxlength(self.pipeline.model, self.pipeline.tokenizer)

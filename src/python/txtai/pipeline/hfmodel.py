@@ -2,6 +2,8 @@
 Hugging Face Transformers model wrapper module
 """
 
+from transformers import AutoTokenizer
+
 from ..models import Models
 from .tensors import Tensors
 
@@ -35,6 +37,30 @@ class HFModel(Tensors):
 
         # Process batch size
         self.batchsize = batch
+
+    def load(self, path, task, **kwargs):
+        """
+        Loads a HuggingFace model and tokenizer.
+
+        Args:
+            path: model path
+            task: model task
+            kwargs: additional keyword args
+        """
+
+        # Unpack path
+        if isinstance(path, tuple):
+            model, tokenizer = path
+        else:
+            model, tokenizer = path, path
+
+        # Load model
+        model = Models.load(model, task=task, modelargs=kwargs).to(self.device)
+
+        # Load tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer) if isinstance(tokenizer, str) else tokenizer
+
+        return model, tokenizer
 
     def prepare(self, model):
         """
