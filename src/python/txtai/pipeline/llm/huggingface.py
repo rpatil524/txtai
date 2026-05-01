@@ -5,9 +5,11 @@ Hugging Face module
 from threading import Thread
 
 from transformers import AutoModelForImageTextToText, TextIteratorStreamer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from ...models import Models
 
+from ..hfmodel import HFModel
 from ..hfpipeline import HFPipeline
 
 from .generation import Generation
@@ -42,7 +44,14 @@ class HFLLM(HFPipeline):
     """
 
     def __init__(self, path=None, quantize=False, gpu=True, model=None, task=None, **kwargs):
-        super().__init__(self.task(path, task, **kwargs), path, quantize, gpu, model, **kwargs)
+        task = self.task(path, task, **kwargs)
+
+        if task == "text2text-generation":
+            # Backwards compatible sequences pipeline
+            self.pipeline = SequencesPipeline(path, quantize, gpu)
+        else:
+            # Supported transformers pipeline
+            super().__init__(task, path, quantize, gpu, model, **kwargs)
 
         # Load tokenizer, if necessary
         self.pipeline.tokenizer = self.pipeline.tokenizer if self.pipeline.tokenizer else Models.tokenizer(path, **kwargs)
@@ -239,3 +248,61 @@ class StreamingResponse:
     def __iter__(self):
         for _ in range(self.length):
             yield from self.stream
+
+
+class SequencesPipeline(HFModel):
+    """
+    Backwards compatible pipeline to continue supporting Sequences LLM generation
+    """
+
+    def __init__(self, path=None, quantize=False, gpu=True, batch=64, **kwargs):
+        # Default model
+        path = path if path else "google-t5/t5-base"
+
+        # Call parent constructor
+        super().__init__(path, quantize, gpu, batch)
+
+        # Text2Text Generation model
+        if isinstance(path, tuple):
+            self.model, self.tokenizer = path
+        else:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(path, **kwargs)
+            self.tokenizer = AutoTokenizer.from_pretrained(path)
+
+        # Move model to device
+        self.model = self.model.to(self.device)
+
+        # Set pipeline task
+        self.task = "text2text-generation"
+
+    def __call__(self, texts, **kwargs):
+        # Remove unused args
+        for x in ["num_workers"]:
+            kwargs.pop(x, None)
+
+        results = []
+        for text in self.generate(texts, **kwargs):
+            results.append({"generated_text": text})
+
+        return results
+
+    def generate(self, inputs, **kwargs):
+        """
+        Generates outputs.
+
+        Args:
+            input: tokenized input
+            kwargs: additional keyword arguments
+
+        Returns:
+            generated output
+        """
+
+        # Tokenize inputs
+        tokens = self.tokenizer(inputs, truncation=kwargs.pop("truncation", False), return_tensors="pt").to(self.device)
+
+        # Generate outputs
+        outputs = self.model.generate(**tokens, **kwargs)
+
+        # Decode and return
+        return [self.tokenizer.decode(x, skip_special_tokens=True) for x in outputs]
